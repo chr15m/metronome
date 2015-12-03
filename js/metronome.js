@@ -3,9 +3,9 @@ var isPlaying = false;      // Are we currently playing?
 var startTime;              // The start time of the entire sequence.
 var current16thNote;        // What note is currently last scheduled?
 var tempo = 120.0;          // tempo (in beats per minute)
-var lookahead = 25.0;       // How frequently to call scheduling function 
+var lookahead = 50.0;       // How frequently to call scheduling function 
                             //(in milliseconds)
-var scheduleAheadTime = 0.1;    // How far ahead to schedule audio (sec)
+var scheduleAheadTime = 0.3;    // How far ahead to schedule audio (sec)
                             // This is calculated from lookahead, and overlaps 
                             // with next interval (in case the timer is late)
 var nextNoteTime = 0.0;     // when the next note is due.
@@ -66,6 +66,28 @@ function scheduleNote( beatNumber, time ) {
     osc.stop( time + noteLength );
 }
 
+function scheduleTick(interval) {
+    // create an oscillator
+    // console.log("create");
+    var osc = audioContext.createOscillator();
+    var gainNode = audioContext.createGain();
+    gainNode.gain.value = 0;
+    osc.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    osc.frequency.value = 0;
+    osc.onended = function() {
+      // console.log("ended");
+      if (isPlaying) {
+        scheduler();
+      }
+      setTimeout(function() {
+        scheduleTick(interval);
+      }, 0);
+    };
+    osc.start();
+    osc.stop(interval / 1000.0);
+}
+
 function scheduler() {
     // while there are notes that will need to play before the next interval, 
     // schedule them and advance the pointer.
@@ -81,10 +103,10 @@ function play() {
     if (isPlaying) { // start playing
         current16thNote = 0;
         nextNoteTime = audioContext.currentTime;
-        timerWorker.postMessage("start");
+        // timerWorker.postMessage("start");
         return "stop";
     } else {
-        timerWorker.postMessage("stop");
+        // timerWorker.postMessage("stop");
         return "play";
     }
 }
@@ -150,17 +172,7 @@ function init(){
 
     requestAnimFrame(draw);    // start the drawing loop.
 
-    timerWorker = new Worker("js/metronomeworker.js");
-
-    timerWorker.onmessage = function(e) {
-        if (e.data == "tick") {
-            // console.log("tick!");
-            scheduler();
-        }
-        else
-            console.log("message: " + e.data);
-    };
-    timerWorker.postMessage({"interval":lookahead});
+    scheduleTick(lookahead);
 }
 
 window.addEventListener("load", init );
